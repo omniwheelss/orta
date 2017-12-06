@@ -1,32 +1,32 @@
 <?php
 	
-if(isset($_REQUEST['action']) && $_REQUEST['action'] == 'do'){
+if(isset($_REQUEST['action']) && $_REQUEST['action'] == 'do' && isset($_REQUEST['from']) && isset($_REQUEST['to']) ){
 
 	include_once("./lib/includes.php");
 	$Table_Name = 'geo_fence_alerts1';
 	
-	for($d = 7 ; $d <= 7; $d++){
-		
-		$Month = 10;
-		$Year = date("Y");
-		$Time=mktime(12, 0, 0, $Month, $d, $Year);          
-		if (date('m', $Time)==$Month){
-			$Date = date('Y-m-d', $Time);
-			$Date_Array[$Date]=date('Y-m-d', $Time);
-		}	
-		
-		// Getting IMEI
-		if(isset($_REQUEST['imei']))
-			$IMEI_Array = array($_REQUEST['imei']);
-		else 
-			$IMEI_Array = array(864547034419338, 864547034266879, 864547036439193);
-		
-		// Getting Date
-		if(isset($_REQUEST['date']))
-			$Date_Array = array($_REQUEST['date'] => $_REQUEST['date']);
-		else 
-			$Date_Array = $Date_Array;
+	$From_Date = $_REQUEST['from'];
+	$To_Date = $_REQUEST['to'];
+	
+	//Call the function to generate the array
+	if(!empty($From_Date) && !empty($To_Date)) {
+		$Date_Array = createDateRangeArray($From_Date, $To_Date);
+	}	
+
+	// Fetching IMEI number
+	if(isset($_REQUEST['accountid'])){
+		$Mysql_Query1 = "select * from device_master where user_account_id = '".$_REQUEST['accountid']."'";
+		$Mysql_Query_Result1 = mysql_query($Mysql_Query1) or die(mysql_error());
+		$device_count1 = mysql_num_rows($Mysql_Query_Result1);
+		if($device_count1>=1){
+			while($device_list = mysql_fetch_array($Mysql_Query_Result1)){
+				$IMEI_Array[$device_list['imei']] = $device_list['imei'];
+			}
+		}
 	}
+	else if(isset($_REQUEST['imei'])) {
+		$IMEI_Array = array($_REQUEST['imei']);
+	}		
 
 	############################################
 	# 
@@ -133,7 +133,7 @@ if(isset($_REQUEST['action']) && $_REQUEST['action'] == 'do'){
 		if($Check_Exist_Result == 0){
 			// For all the IMEI
 			foreach($IMEI_Array as $IMEI){
-				
+
 				//Get Account ID based on IMEI
 				$Get_AccountID_IMEI = Get_AccountID_IMEI($IMEI);
 					
