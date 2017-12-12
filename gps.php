@@ -16,6 +16,11 @@
 		// Data parsing
 		list($Format_Type,$Protocol_Version,$IMEI,$Date_Stamp,$Live_Data,$GPS_Status,$Latitude,$Longitude,$Altitude,$Speed,$Direction,$Odometer,$GPS_Move_Status,$External_Battery_Volt,$Internal_Battery_Percent,$GSM_Signal,$Unused,$Alert_Msg_Code,$Sensor_Interface,$IGN,$Analog_Input1,$Digital_Input1,$Output1,$Sequence_No,$Check_Sum)=explode (",",$Data);
 		
+		// Daily Serial data File Creation
+		$Log_Prefix = $IMEI;
+		File_Creation($Data,$LogPath,$Log_Prefix);
+		PrintMessage("Individual Log File Created",$Debug);
+
 		PrintMessage("Inside GPS and Data parsing done",$Debug);
 
 		// Format Validation
@@ -26,16 +31,12 @@
 			if(($IGN == 1 && $Speed < 1.3) || ($IGN == 0 && $Speed > 0 )){
 				$Log_Prefix = "Error";
 				if($IGN == 0){
-					//File_Creation($Data,$LogPath,$Log_Prefix,$Extra_Data);
+					File_Creation($Data,$LogPath,$Log_Prefix,$Extra_Data);
 					PrintMessage("Error Log File Created",$Debug);
 				}	
 				$Speed = 0;
 			}				
 
-			// Daily Serial data File Creation
-			$Log_Prefix = $IMEI;
-			//File_Creation($Data,$LogPath,$Log_Prefix);
-			PrintMessage("Individual Log File Created",$Debug);
 			
 			//Formatting Date
 			$Date_Format_Val = Date_Format_WTGPS($Date_Stamp);
@@ -43,7 +44,7 @@
 			$Device_Epoch_Time = $Date_Format_Val[1];
 			
 			// Fetching Location from Location Master
-			//$Location_Name = FetchLocationName($Latitude,$Longitude);
+			$Location_Name = FetchLocationName($Latitude,$Longitude);
 			PrintMessage("Location Name Fetched",$Debug);
 
 			// Check Duplicate data

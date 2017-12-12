@@ -164,13 +164,13 @@
 	#		Duplicate Records Checking
 	#
 	#######################################################
-	
 	function Check_Exist($Tab_Name,$Duplicate_Columns_Final){
-		$Mysql_Record_Count = 0;
-		$Mysql_Query = "select * from ".$Tab_Name." where ".$Duplicate_Columns_Final."";
+		$Mysql_Query = "select * from $Tab_Name where $Duplicate_Columns_Final";
 		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
 		$Mysql_Record_Count = mysql_num_rows($Mysql_Query_Result);
-		return $Mysql_Record_Count;
+		if($Mysql_Record_Count>=1){
+			return $Mysql_Record_Count;
+		}
 	}
 
 	######################################################
@@ -337,10 +337,10 @@
 	#
 	############################################
 
-	function Geofence_Decide_InOut($Geo_User_Account_ID, $Latitude, $Longitude, $Device_Date_Stamp, $Table_Name){
+	function Geofence_Calculator($Geo_User_Account_ID, $IMEI, $Latitude, $Longitude, $Location_Name, $Device_Date_Stamp, $Data){
 		
 		$Result = null;
-		$Mysql_Query = "select * from ".$Table_Name." where user_account_id = '".$Geo_User_Account_ID."'";
+		$Mysql_Query = "select * from geo_fence where user_account_id = '".$Geo_User_Account_ID."'";
 		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
 		$Mysql_Record_Count = mysql_num_rows($Mysql_Query_Result);
 		if($Mysql_Record_Count >= 1){
@@ -349,24 +349,23 @@
 				$Geo_longitude = $Query_Result['longitude'];
 				$Radius = $Query_Result['radius'];
 				$Trip_Index = $Query_Result['id'];
-				$Distance = null;
 				
 				// Distance between each geofence with current data
 				$Distance = distance($Geo_latitude, $Geo_longitude, $Latitude, $Longitude);
 				$Distance = round($Distance);
-
+				//echo "Trip -".$Trip_Index."---".$Device_Date_Stamp."--Distance--".$Distance;
+				//echo "<br />";
 				// In Condition
 				if($Distance < $Radius){
+					//$Result[] = array($Geo_User_Account_ID, $IMEI, $Latitude, $Longitude, $Location_Name,$Trip_Index, $Device_Date_Stamp, $Data);
 					$Trip_Status = "IN";
-					$Result[] = array($Trip_Index, $Trip_Status, $Distance);
+					$Result[] = array($Trip_Index, $Trip_Status);
 				}
 				else{
 					$Trip_Status = "OUT";
 					$Result[] = array($Trip_Index, $Trip_Status, $Distance);
 				}
-				$Debug_Result.= "Trip -".$Trip_Index."---".$Device_Date_Stamp."--Distance--".$Distance."--Status--".$Trip_Status."<br />";
 			}
-			echo $Debug_Result;
 			return $Result;
 		}			
 	}
@@ -378,17 +377,14 @@
 	#
 	############################################
 
-	function Geofence_Alerts_Insert($Geo_User_Account_ID, $IMEI, $Latitude, $Longitude, $Location_Name, $Trip_Status,$Alert_Dispatch, $Trip_Index, $Device_Date_Stamp, $Server_Date_Stamp, $Data, $Table_Name){
+	function Geofence_Alerts_Insert($Geo_User_Account_ID, $IMEI, $Latitude, $Longitude, $Location_Name, $Trip_Status,$Alert_Dispatch, $Trip_Index, $Device_Date_Stamp, $Server_Date_Stamp, $Data){
 		
 		$Result = false;
-		//Dont allow duplicate record
-		$Mysql_Query = "INSERT INTO ".$Table_Name." (date_stamp,server_date_stamp,imei,latitude,longitude,location_name,status,alert_dispatch,trip_index,raw_data,epoch_time) values ('".$Device_Date_Stamp."','".$Server_Date_Stamp."','".$IMEI."','".$Latitude."','".$Longitude."','".$Location_Name."','".$Trip_Status."','".$Alert_Dispatch."','".$Trip_Index."','".$Data."','".strtotime($Device_Date_Stamp)."')";
+		$Mysql_Query = "INSERT INTO geo_fence_alerts (date_stamp,server_date_stamp,imei,latitude,longitude,location_name,status,alert_dispatch,trip_index,raw_data,epoch_time) values ('".$Device_Date_Stamp."','".$Server_Date_Stamp."','".$IMEI."','".$Latitude."','".$Longitude."','".$Location_Name."','".$Trip_Status."','".$Alert_Dispatch."','".$Trip_Index."','".$Data."','".strtotime($Device_Date_Stamp)."')";
 		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
 		if($Mysql_Query_Result){
-			$Debug_Msg = "Inserted ".$Trip_Status." trip ".$Trip_Index."<br />";
 			$Result = true;
-		}
-		echo $Debug_Msg;
+		}			
 		return $Result;
 	}
 		
@@ -399,15 +395,18 @@
 	#
 	############################################
 
-	function Geofence_Alerts_Exist($IMEI, $Trip_Index, $Table_Name){
+	function Geofence_Alerts_Exist($IMEI, $Trip_Index){
 		
 		$Result = null;
-		$Mysql_Query = "select * from ".$Table_Name." where IMEI = '".$IMEI."' and Trip_Index = '".$Trip_Index."' order by id desc limit 1";
+		$Mysql_Query = "select * from geo_fence_alerts where IMEI = '".$IMEI."' and Trip_Index = '".$Trip_Index."' order by id desc limit 1";
 		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
 		$Mysql_Record_Count = mysql_num_rows($Mysql_Query_Result);
 		if($Mysql_Record_Count > 0){
 			$Query_Result = mysql_fetch_array($Mysql_Query_Result);
 			$Result = $Query_Result['status'];
+		}
+		else{
+			$Result = null;
 		}
 		return $Result;
 	}
@@ -588,41 +587,24 @@
 	#
 	############################################
 
-	function Get_EpochDiff_Vehicle($Epoch1,$Epoch2, $Previous_Status, $Current_Status, $Diff_Record){
-
+	function Get_EpochDiff_Vehicle($Epoch1,$Epoch2, $Array_Type){
+		
 		$Result = null;
 		if(!empty($Epoch1) && !empty($Epoch2)){	
 		
-			// Result
-			$Result = $Epoch2 - $Epoch1;
-			
-			if($Diff_Record == 0){
-				
-				if($Current_Status == 'Moving'){
-					if($Result > 60)
-						$Result = 60;
-				}
-				else if($Current_Status == 'Stopped'){
-					if($Result > 300)
-						$Result = 300;
-				}
-				else if($Current_Status == 'Idle'){
-					if($Result > 60)
-						$Result = 60;
-				}
+			if($Array_Type == 'Moving' || $Array_Type == 'Idle' ||  $Array_Type == 'Unknown'){
+				$Result = $Epoch2 - $Epoch1;
+				if($Result > 120)
+					$Result = 60;
 			}
-			else if ($Diff_Record == 1){
-				
-				if($Previous_Status == 'Stopped' && $Current_Status == 'Idle' || $Previous_Status == 'Idle' && $Current_Status == 'Stopped'  || $Previous_Status == 'Moving' && $Current_Status == 'Stopped' || $Previous_Status == 'Stopped' && $Current_Status == 'Moving'){
-					if($Result > 300)
-						$Result = 300;
-				}
-				else if($Previous_Status == 'Idle' && $Current_Status == 'Moving' || $Previous_Status == 'Moving' && $Current_Status == 'Idle'){
-					if($Result > 60)
-						$Result = 60;
-				}
+			else if($Array_Type == 'Stopped'){
+				$Result = $Epoch2 - $Epoch1;
+				if($Result > 600)
+					$Result = 300;
 			}
-			
+			else{
+				$Result = $Epoch2 - $Epoch1;
+			}
 		}
 		return $Result;
 	}
@@ -709,7 +691,6 @@
 		if($time>=0 && $time<=59) {
 			// Seconds
 			//$timeshift = $time.' seconds ';
-			if($premin[0] > 0 || $time > 0)
 			$timeshift = $preday[0].' : '.$prehour[0].' : '.$premin[0].' min '.$time.' sec ';
 			//$timeshift = '<table border="0" cellpadding="0" cellspacing="0" width="100px" class="time_tab"><tr><td width="25px;">'.$preday[0].'</td><td>'.$prehour[0].' : '.$min[0].'</td></tr></table>';
 
@@ -784,7 +765,7 @@
 	#
 	############################################
 	
-	function Diff_Between_Records($Type, $Get_Array, $Previous_Status, $Current_Status, $Diff_Record){
+	function Diff_Between_Records($Type, $Get_Array, $Array_Type){
 		$Result = null;
 		$Array_Count = count($Get_Array); 
 		if($Array_Count > 0){
@@ -799,7 +780,7 @@
 						$Result[] = Get_TimeDiff($Get_Array[$I],$Get_Array[$I+1]);
 					}
 					else if ($Type == 'epoch'){
-						$Result[] = Get_EpochDiff_Vehicle($Get_Array[$I],$Get_Array[$I+1], $Previous_Status, $Current_Status, $Diff_Record);
+						$Result[] = Get_EpochDiff_Vehicle($Get_Array[$I],$Get_Array[$I+1], $Array_Type);
 					}
 				}
 				$I++;
@@ -819,8 +800,7 @@
 	############################################
 		
 	function Data_Current_Status($GPS_Move_Status, $Speed, $IGN, $Alert_Msg_Code){
-		$Alert_Msg_Code = explode("|",$Alert_Msg_Code);
-
+		
 		$Result = null;
 		// Moving Status
 		if($GPS_Move_Status == 1 && $Speed > 1.5 && $IGN == 1){
@@ -844,381 +824,6 @@
 		}
 		return $Result = array($Status, $IGN, $Status_Icon);	
 	}
-
-
-		
 	
-	############################################
-	#
-	#    Decision_Maker_Pocket_Diff
-	#
-	############################################
-	
-	function Decision_Maker_Pocket_Diff($Data_Pre_Status_Val, $Data_Cur_Status_Val, $Pre_Cur_Diff_Sum){
-		
-		$Result = null;
-		$Moving_Text = "Diff Btwn above and below Record : Moving--".Epoch_To_Time($Pre_Cur_Diff_Sum)."<br />";
-		$Stopped_Text = "Diff Btwn above and below Record : Stopped--".Epoch_To_Time($Pre_Cur_Diff_Sum)."<br />";
-		$Idle_Text = "Diff Btwn above and below Record : Idle--".Epoch_To_Time($Pre_Cur_Diff_Sum)."<br />";
-		$Unknown_Text = "Diff Btwn above and below Record : Unknown--".Epoch_To_Time($Pre_Cur_Diff_Sum)."<br />";
-		
-		// For Moving
-		if($Data_Pre_Status_Val == 'Moving' && $Data_Cur_Status_Val == 'Idle' && $Pre_Cur_Diff_Sum <= 60){
-			$Moving_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Moving";
-			//echo $Moving_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Moving' && $Data_Cur_Status_Val == 'Idle' && $Pre_Cur_Diff_Sum > 60){
-			$Idle_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Idle";
-			//echo $Idle_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Moving' && $Data_Cur_Status_Val == 'Stopped' && $Pre_Cur_Diff_Sum <= 60){
-			$Stopped_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Stopped";
-			//echo $Stopped_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Moving' && $Data_Cur_Status_Val == 'Stopped' && $Pre_Cur_Diff_Sum > 60){
-			$Stopped_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Stopped";
-			//echo $Stopped_Text;
-		}
-		
-		// For Stopped
-		else if($Data_Pre_Status_Val == 'Stopped' && $Data_Cur_Status_Val == 'Moving' && $Pre_Cur_Diff_Sum <= 60){
-			$Moving_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Moving";
-			//echo $Moving_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Stopped' && $Data_Cur_Status_Val == 'Moving' && $Pre_Cur_Diff_Sum > 60){
-			$Stopped_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Stopped";
-			//echo $Stopped_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Stopped' && $Data_Cur_Status_Val == 'Idle' && $Pre_Cur_Diff_Sum <= 60){
-			$Idle_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Idle";
-			//echo $Idle_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Stopped' && $Data_Cur_Status_Val == 'Idle' && $Pre_Cur_Diff_Sum > 60){
-			$Stopped_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Stopped";
-			//echo $Stopped_Text;
-		}
-		
-		// For Idle
-		else if($Data_Pre_Status_Val == 'Idle' && $Data_Cur_Status_Val == 'Moving' && $Pre_Cur_Diff_Sum <= 60){
-			$Moving_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Moving";
-			//echo $Moving_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Idle' && $Data_Cur_Status_Val == 'Moving' && $Pre_Cur_Diff_Sum > 60){
-			$Idle_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Idle";
-			//echo $Idle_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Idle' && $Data_Cur_Status_Val == 'Stopped' && $Pre_Cur_Diff_Sum <= 60){
-			$Idle_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Idle";
-			//echo $Idle_Text;
-		}
-		else if($Data_Pre_Status_Val == 'Idle' && $Data_Cur_Status_Val == 'Stopped' && $Pre_Cur_Diff_Sum > 60){
-			$Stopped_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Stopped";
-			//echo $Stopped_Text;
-		}
-		else{
-			$Unknown_Additional_Diff = $Pre_Cur_Diff_Sum;
-			$Maker_Decision = "Unknown";
-			//echo $Unknown_Text;
-		}
-		$Result = array($Moving_Additional_Diff, $Stopped_Additional_Diff, $Idle_Additional_Diff, $Unknown_Additional_Diff, $Maker_Decision);
-		
-		return $Result;
-	}
-	
-	
-	############################################
-	#
-	#    Vehicle Data Current Status
-	#
-	############################################
-
-	function Remove_Invalid_Records($Result_Array){
-		
-		$Final_Array = null;
-		$Alert_Msg_Code = $Result_Array['alert_msg_code'];
-		$Live_Data = $Result_Array['live_data'];
-		$GPS_Status = $Result_Array['gps_status'];
-		$Speed = $Result_Array['speed'];
-		$GPS_Move_Status = $Result_Array['sps_move_status'];
-		$IGN = $Result_Array['ign'];
-		
-		// Skip idle status
-		if($GPS_Status  == 1 && $Speed <= 10 && $GPS_Move_Status == 2 && $IGN == 1){
-			print_r("SEENI".$Result_Array);
-			//$Final_Array = unset($Result_Array[0]);
-		}
-		else{
-			$Final_Array = $Result_Array;
-		}
-			
-		return $Final_Array;		
-	}
-	
-	
-	############################################
-	#
-	#    Add_Vehicle_Status_Diff_AddDiff
-	#
-	############################################
-
-	function Add_Vehicle_Status_Diff_AddDiff($Speed_Array, $All_DateTime_Diff, $All_DateTime_NE_Diff, $DateTime_Moving_Diff, $DateTime_Stopped_Diff, $DateTime_Idle_Diff, 		$DateTime_Unknown_Diff, $Decision_Maker_Moving_Diff, $Decision_Maker_Stopped_Diff, $Decision_Maker_Idle_Diff, $Decision_Maker_Unknown_Diff){
-	
-		// Data for all
-		$All_DateTime_Diff = array_sum($All_DateTime_Diff) + array_sum($All_DateTime_NE_Diff);
-		$Total_Pocket_Time = Epoch_To_Time($All_DateTime_Diff);
-
-		// Data for Moving
-		$DateTime_Moving_Diff = array_sum($DateTime_Moving_Diff) + array_sum($Decision_Maker_Moving_Diff);
-		$Total_Moving_Pocket_Time = Epoch_To_Time($DateTime_Moving_Diff);
-		
-		// Data for Stopped
-		$DateTime_Stopped_Diff = array_sum($DateTime_Stopped_Diff) + array_sum($Decision_Maker_Stopped_Diff);
-		$Total_Stopped_Pocket_Time = Epoch_To_Time($DateTime_Stopped_Diff);
-		
-		// Data for Idle
-		$DateTime_Idle_Diff = array_sum($DateTime_Idle_Diff) + array_sum($Decision_Maker_Idle_Diff);
-		$Total_Idle_Pocket_Time = Epoch_To_Time($DateTime_Idle_Diff);
-		
-		// Data for Unknown
-		$DateTime_Unknown_Diff = array_sum($DateTime_Unknown_Diff) + array_sum($Decision_Maker_Unknown_Diff);
-		$Total_Unknown_Pocket_Time = Epoch_To_Time($DateTime_Unknown_Diff);
-		
-		$Total_Seperated_Time = $DateTime_Moving_Diff + $DateTime_Stopped_Diff + $DateTime_Idle_Diff + $DateTime_Unknown_Diff;
-		$Total_Seperated_Time = Epoch_To_Time($Total_Seperated_Time);
-		/*
-		echo "<hr /><h4>Total Up Time -- ".$Total_Pocket_Time;
-		echo "<br />Total Seperated Up Time -- ".Epoch_To_Time($Total_Seperated_Time);
-		echo "</h4><br />Moving Time -- ".$Total_Moving_Pocket_Time;
-		echo "<br />Stopped Time -- ".$Total_Stopped_Pocket_Time;
-		echo "<br />Idle Time -- ".$Total_Idle_Pocket_Time;
-		echo "<br />Unknown Time -- ".$Total_Unknown_Pocket_Time;
-		echo "<hr />";
-		echo "<br />Diff Time -- ".Epoch_To_Time(array_sum($All_DateTime_NE_Diff));
-		echo "<br />Diff Moving Time -- ".Epoch_To_Time(array_sum($Decision_Maker_Moving_Diff));
-		echo "<br />Diff Stopped Time -- ".Epoch_To_Time(array_sum($Decision_Maker_Stopped_Diff));
-		echo "<br />Diff Idle Time -- ".Epoch_To_Time(array_sum($Decision_Maker_Idle_Diff));
-		echo "<br />Diff Unknown Time -- ".Epoch_To_Time(array_sum($Decision_Maker_Unknown_Diff));
-		*/
-		return array($Speed_Array, $Total_Pocket_Time, $Total_Seperated_Time, $Total_Moving_Pocket_Time, $Total_Stopped_Pocket_Time, $Total_Idle_Pocket_Time, $Total_Unknown_Pocket_Time);
-	}
-
-
-	
-	############################################
-	#
-	#   Get_Daily_Summary
-	#
-	############################################	
-	function Get_Daily_Summary($Date, $IMEI){
-		
-		$Result = null;
-		
-		$From_Date = $Date. " 00:00:00";
-		$To_Date = $Date. " 23:59:59";
-
-		$Mysql_Query = "select * from device_data where imei = '".$IMEI."' and device_date_stamp between '".$From_Date."' and '".$To_Date."' and alert_msg_code != 'IN|0' order by device_date_stamp asc";
-		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
-		$Row_Count = mysql_num_rows($Mysql_Query_Result);
-		if($Row_Count >=1){
-			$i = 1;
-			$Decision_Maker_All_Diff = array();
-			$Decision_Maker_Moving_Diff = array();
-			$Decision_Maker_Stopped_Diff = array();
-			$Decision_Maker_Idle_Diff = array();
-			$Decision_Maker_Unknown_Diff = array();
-			
-			while($Result_Array = mysql_fetch_array($Mysql_Query_Result)){
-				
-				// Skip invalid Records
-				//$Valid_Records = Remove_Invalid_Records($Result_Array);
-				
-				//foreach($Valid_Records as $Result_Array)
-				{
-					$Diff_Record = 0;
-					$Speed_Array[] = $Result_Array['speed'];
-					$Device_Stamp_All_Array[] = $Result_Array['device_date_stamp'];
-					$GPS_Move_Status = $Result_Array['gps_move_status'];
-					$IGN = $Result_Array['ign'];
-					$Speed = $Result_Array['speed'];
-					$Alert_Msg_Code = $Result_Array['alert_msg_code'];
-					
-					// Current Status Check
-					$Data_Cur_Status = Data_Current_Status($GPS_Move_Status, $Speed, $IGN, $Alert_Msg_Code);
-					$Data_Cur_Status_Val = $Data_Cur_Status[0];
-					$Data_Pre_Status_Val = $Data_Pre_Array[0];
-					
-					// Checking Record is different and assign flag
-					if($Data_Pre_Status_Val != $Data_Cur_Status_Val && !empty($Data_Pre_Status_Val)){
-						$Diff_Record = 1;
-					}
-					
-					$Pre_Cur_Diff_Array = array($Data_Pre_Array[1], $Result_Array['device_epoch_time']);
-					// calculate only equal record - not diff record
-					if($Diff_Record == 0){
-						// All data sequence
-						$Pre_Cur_Diff_Val = Diff_Between_Records('epoch', $Pre_Cur_Diff_Array, $Data_Pre_Status_Val, $Data_Cur_Status_Val, $Diff_Record);
-						$Pre_Cur_Diff_Sum = array_sum($Pre_Cur_Diff_Val);
-						$All_DateTime_Diff[] = $Pre_Cur_Diff_Sum;
-
-						// Data by status
-						// Moving
-						if($Data_Cur_Status_Val  == 'Moving'){
-							$Device_Stamp_Moving_Array[] = $Result_Array['device_epoch_time'];
-							$Result_Array['device_date_stamp'] = "Moving--".$Result_Array['device_date_stamp'];
-							$Pre_Cur_Diff_Moving_Val = Diff_Between_Records('epoch', $Pre_Cur_Diff_Array, $Data_Pre_Status_Val, $Data_Cur_Status_Val, $Diff_Record);
-							$Pre_Cur_Diff_Moving_Sum = array_sum($Pre_Cur_Diff_Moving_Val);
-							$DateTime_Moving_Diff[] = $Pre_Cur_Diff_Moving_Sum;
-
-						}
-						//Stopped
-						else if($Data_Cur_Status_Val == 'Stopped'){
-							$Device_Stamp_Stopped_Array[] = $Result_Array['device_epoch_time'];
-							$Result_Array['device_date_stamp'] = "Stopped--".$Result_Array['device_date_stamp'];
-							$Pre_Cur_Diff_Stopped_Val = Diff_Between_Records('epoch', $Pre_Cur_Diff_Array, $Data_Pre_Status_Val, $Data_Cur_Status_Val, $Diff_Record);
-							$Pre_Cur_Diff_Stopped_Sum = array_sum($Pre_Cur_Diff_Stopped_Val);
-							$DateTime_Stopped_Diff[] = $Pre_Cur_Diff_Stopped_Sum;
-						}
-						//Idle
-						else if($Data_Cur_Status_Val == 'Idle'){
-							$Device_Stamp_Idle_Array[] = $Result_Array['device_epoch_time'];
-							$Result_Array['device_date_stamp'] = "Idle--".$Result_Array['device_date_stamp'];
-							$Pre_Cur_Diff_Idle_Val = Diff_Between_Records('epoch', $Pre_Cur_Diff_Array, $Data_Pre_Status_Val, $Data_Cur_Status_Val, $Diff_Record);
-							$Pre_Cur_Diff_Idle_Sum = array_sum($Pre_Cur_Diff_Idle_Val);
-							$DateTime_Idle_Diff[] = $Pre_Cur_Diff_Idle_Sum;
-						}
-						//Unknown
-						else{
-							$Device_Stamp_Unknown_Array[] = $Result_Array['device_epoch_time'];
-							$Result_Array['device_date_stamp'] = "Unknown--".$Result_Array['device_date_stamp'];
-							$Pre_Cur_Diff_Unknown_Val = Diff_Between_Records('epoch', $Pre_Cur_Diff_Array, $Data_Pre_Status_Val, $Data_Cur_Status_Val, $Diff_Record);
-							$Pre_Cur_Diff_Unknown_Sum = array_sum($Pre_Cur_Diff_Unknown_Val);
-							$DateTime_Unknown_Diff[] = $Pre_Cur_Diff_Unknown_Sum;
-						}
-						
-					}
-					else if($Diff_Record == 1){
-						// All data diff
-						$Pre_Cur_Diff_Val = Diff_Between_Records('epoch', $Pre_Cur_Diff_Array, $Data_Pre_Status_Val, $Data_Cur_Status_Val, $Diff_Record);
-						$Pre_Cur_Diff_Sum = array_sum($Pre_Cur_Diff_Val);
-						$All_DateTime_NE_Diff[] = $Pre_Cur_Diff_Sum;
-
-						// Decide whom to assign the difference 		
-						$Decision_Maker_Pocket_Diff = Decision_Maker_Pocket_Diff($Data_Pre_Status_Val, $Data_Cur_Status_Val, $Pre_Cur_Diff_Sum);
-						$Maker_Decision = $Decision_Maker_Pocket_Diff[4];
-
-						if($Maker_Decision == 'Moving'){
-							array_push($Decision_Maker_Moving_Diff, $Decision_Maker_Pocket_Diff[0]);
-						}
-						else if($Maker_Decision == 'Stopped'){
-							array_push($Decision_Maker_Stopped_Diff, $Decision_Maker_Pocket_Diff[1]);
-						}
-						else if($Maker_Decision == 'Idle'){
-							array_push($Decision_Maker_Idle_Diff, $Decision_Maker_Pocket_Diff[2]);
-						}
-						else if($Maker_Decision == 'Unknown'){
-							array_push($Decision_Maker_Unknown_Diff, $Decision_Maker_Pocket_Diff[3]);
-						}
-						
-						// Just for debug 
-						// Moving
-						if($Data_Cur_Status_Val  == 'Moving'){
-							$Result_Array['device_date_stamp'] = "Moving--".$Result_Array['device_date_stamp'];
-						}
-						//Stopped
-						else if($Data_Cur_Status_Val == 'Stopped'){
-							$Result_Array['device_date_stamp'] = "Stopped--".$Result_Array['device_date_stamp'];
-						}
-						//Idle
-						else if($Data_Cur_Status_Val == 'Idle'){
-							$Result_Array['device_date_stamp'] = "Idle--".$Result_Array['device_date_stamp'];
-						}
-						//Unknown
-						else{
-							$Result_Array['device_date_stamp'] = "Unknown--".$Result_Array['device_date_stamp'];
-						}
-					}
-					
-					// Assigning the previous value
-					$Data_Pre_Array = array($Data_Cur_Status_Val, $Result_Array['device_epoch_time']);
-					
-					// For debug only
-					//echo $i."-----".$Result_Array['device_date_stamp']."<br />";
-					
-					$i++;
-				}	
-			}
-		}	    
-		
-		$Final_Result = Add_Vehicle_Status_Diff_AddDiff($Speed_Array, $All_DateTime_Diff, $All_DateTime_NE_Diff, $DateTime_Moving_Diff, $DateTime_Stopped_Diff, $DateTime_Idle_Diff, $DateTime_Unknown_Diff, $Decision_Maker_Moving_Diff, $Decision_Maker_Stopped_Diff, $Decision_Maker_Idle_Diff, $Decision_Maker_Unknown_Diff);
-		
-		return $Final_Result;
-	}	
-	
-
-	
-	############################################
-	#
-	#   Date Range
-	#
-	############################################		
-	
-	
-	function createDateRangeArray($strDateFrom,$strDateTo)
-	{
-		// takes two dates formatted as YYYY-MM-DD and creates an
-		// inclusive array of the dates between the from and to dates.
-
-		// could test validity of dates here but I'm already doing
-		// that in the main script
-
-		$aryRange=array();
-
-		$iDateFrom=mktime(1,0,0,substr($strDateFrom,5,2),     substr($strDateFrom,8,2),substr($strDateFrom,0,4));
-		$iDateTo=mktime(1,0,0,substr($strDateTo,5,2),     substr($strDateTo,8,2),substr($strDateTo,0,4));
-
-		if ($iDateTo>=$iDateFrom)
-		{
-			array_push($aryRange,date('Y-m-d',$iDateFrom)); // first entry
-			while ($iDateFrom<$iDateTo)
-			{
-				$iDateFrom+=86400; // add 24 hours
-				array_push($aryRange,date('Y-m-d',$iDateFrom));
-			}
-		}
-		return $aryRange;
-	}
-	
-	######################################
-	#
-	#       Difference between Odameter
-	#
-	############################################
-	
-	function Diff_Between_Odameter($Previous_Value, $Current_Value){
-		//echo "---".$Previous_Value."---".$Current_Value."<br />";
-		$Result = null;
-		$Odometer_Diff = 0;
-		
-		if(!empty($Previous_Value) && !empty($Current_Value)){	
-			$Odometer_Diff = $Current_Value - $Previous_Value;
-			$Result = $Odometer_Diff;
-		}	
-		else{
-			$Result = null;
-		}
-		return $Result;
-	}
 ?>
 
