@@ -349,6 +349,7 @@
 				$Geo_longitude = $Query_Result['longitude'];
 				$Radius = $Query_Result['radius'];
 				$Trip_Index = $Query_Result['id'];
+				$Distance = null;
 				
 				// Distance between each geofence with current data
 				$Distance = distance($Geo_latitude, $Geo_longitude, $Latitude, $Longitude);
@@ -359,7 +360,7 @@
 				if($Distance < $Radius){
 					//$Result[] = array($Geo_User_Account_ID, $IMEI, $Latitude, $Longitude, $Location_Name,$Trip_Index, $Device_Date_Stamp, $Data);
 					$Trip_Status = "IN";
-					$Result[] = array($Trip_Index, $Trip_Status);
+					$Result[] = array($Trip_Index, $Trip_Status, $Distance);
 				}
 				else{
 					$Trip_Status = "OUT";
