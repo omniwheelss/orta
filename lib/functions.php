@@ -85,18 +85,39 @@
 
 	function FetchLocationName($Latitude,$Longitude){
 
-		$LocationSql = "select * from DATA_MASTER.LOCATION_MASTER where Latitude like '".$Latitude."%' and Longitude like '".$Longitude."%' limit 1";
+		$LocationSql = "select * from DATA_MASTER.LOCATION_MASTER where Latitude = '".$Latitude."' and Longitude = '".$Longitude."' limit 1";
 		$LocationResult = mysql_query($LocationSql);
 		$LocationCount = mysql_num_rows($LocationResult);
 		if($LocationCount > 0){
 			$LocationRow = mysql_fetch_array($LocationResult);
-			return $Location_Name=$LocationRow['Location_Name'];
+			$Location_Name=$LocationRow['Location_Name'];
 		}
 		else{
-			return $Location_Name = GetLocationName('google',$Longitude,$Latitude);
+			$Location_Name = GetLocationName('google',$Latitude,$Longitude);
 		}
+		return $Location_Name;
 	}
 
+	#
+	#	Location APIs
+	#
+	function googleReversGeoApiKey(){
+		$keyArray = array(
+			'AIzaSyABIxljR0rtVmnWu7Fgo4OQQycURf7YdpA',
+			'AIzaSyCDYice4etlOoHF8KKuEyUYjfytNsNPSHs',
+			'AIzaSyBMAyTbGsFMChNbD7q_hDOSJnSEnZnDJ40',
+			'AIzaSyAJJTubTf9NUEsnlPs0TLKvKCQ4GT5zqyA',
+			'AIzaSyCNv-Uh4ZDwqcujDD8XfsiedwYJepQxykM',
+
+			//'AIzaSyDgMqT0ID-YAlCZrytxB8HPSnK4oypSJAc',
+			//'AIzaSyBvVKauuqFVOtdBHcRs-oDDOTQjR-sMRKg',
+			//'AIzaSyDk465ePU-1_MKfHrF0mnh6Cm-VTx3Y7Qo',
+			//'AIzaSyCYzTtJlwzzLa7eyWv7qOq0nkci8yKuz5k'
+		);
+		$randomKey = array_rand($keyArray);
+		return $keyArray[$randomKey];
+	}	
+	
 	//-------------------------------------------------------------------------------------------------------------
 	// Function to Reverse Geo Code a given set of Co-ordinates
 	// Parameters to be provided are
@@ -108,43 +129,48 @@
 	function GetLocationName($REV_GEO_ENGINE,$geo_x,$geo_y) {
 
 		if ($REV_GEO_ENGINE=="google"){
-			// 16 - AIzaSyAmBUJXRJvJNsUugFZHLyjA4hZ6Hkjp0Fg
-			// 17 - AIzaSyCUu4GhYlLQ8wp89DpCKA6HnvY4Q9l2G4Y
-			$GOOGLE_REV_GEO_API_KEY = "AIzaSyCUu4GhYlLQ8wp89DpCKA6HnvY4Q9l2G4Y";
-			if($geo_y != '0.0000000' && $geo_y != '0.0000000')      {
-				$url = "https://maps.googleapis.com/maps/api/geocode/xml?latlng=".$geo_y.",".$geo_x."&sensor=true&key=".$GOOGLE_REV_GEO_API_KEY."";
-				//echo "<br />";
+			if($geo_x != '0.0000000' && $geo_y != '0.0000000')      {
+				$url = "https://maps.googleapis.com/maps/api/geocode/xml?latlng=".$geo_x.",".$geo_y."&sensor=true&key=".googleReversGeoApiKey()."";
 				if ($query = load_xml($url)){
-						if($query->error_message == 'You have exceeded your daily request quota for this API.'){
-								$GOOGLE_REV_GEO_API_KEY = "AIzaSyAmBUJXRJvJNsUugFZHLyjA4hZ6Hkjp0Fg";
-								$url = "https://maps.googleapis.com/maps/api/geocode/xml?latlng=".$geo_y.",".$geo_x."&sensor=true&key=".$GOOGLE_REV_GEO_API_KEY."";
+					if($query->status == 'OVER_QUERY_LIMIT'){
+						$url = "https://maps.googleapis.com/maps/api/geocode/xml?latlng=".$geo_x.",".$geo_y."&sensor=true&key=".googleReversGeoApiKey()."";
+						if ($query = load_xml($url)){
+							if($query->status == 'OVER_QUERY_LIMIT'){
+								$url = "https://maps.googleapis.com/maps/api/geocode/xml?latlng=".$geo_x.",".$geo_y."&sensor=true&key=".googleReversGeoApiKey()."";
 								if ($query = load_xml($url)){
-										$location = $query->result->formatted_address;
+									$location = $query->result->formatted_address;
 								}
-						}
-						else{
+							}
+							else{
 								$location = $query->result->formatted_address;
+							}	
 						}
+					}
+					else{
+						$location = $query->result->formatted_address;
+					}
 				}
 			}
 		}
 		$location=trim($location);
-		//Remove any quotes or commas in the string. Replace "," with a space and just strip the quotes. This is
-		//temperory. Need to use preg_replace once the entire filter is frozen.
 		$location = str_replace(","," ",$location);
 		$location = str_replace("\"","",$location);
 		$location = str_replace("'","",$location);
 		$Server_Date_Stamp = date("Y-m-d H:i:s");
 		
 		if(!empty($location)){
-			$InsertLocationSql = "Insert into DATA_MASTER.LOCATION_MASTER (Latitude,Longitude,Location_Name,Date_Stamp,Epoch_Time) values ('".$geo_y."','".$geo_x."','".$location."','".$Server_Date_Stamp."','".time()."')";
-			$Result = mysql_query($InsertLocationSql) or die (mysql_error());
-		}
+			$Mysql_Query = "select * from DATA_MASTER.location_master0718 where latitude = '".$geo_x."' and longitude = '".$geo_y."'";
+			$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
+			$Mysql_Record_Count = mysql_num_rows($Mysql_Query_Result);
+			if($Mysql_Record_Count == 0){
+				$InsertLocationSql = "Insert into DATA_MASTER.location_master0718 (Latitude,Longitude,Location_Name,Date_Stamp,Epoch_Time) values ('".$geo_x."','".$geo_y."','".$location."','".$Server_Date_Stamp."','".time()."')";
+				$Result = mysql_query($InsertLocationSql) or die (mysql_error());
+			}
+		}		
 		
 		if (strlen($location)==0){$location="location not available";}
 		return $location;
 		
-	 
 	}
 
 
@@ -400,7 +426,7 @@
 	function Geofence_Alerts_Exist($IMEI, $Trip_Index, $Table_Name){
 		
 		$Result = null;
-		$Mysql_Query = "select * from ".$Table_Name." where IMEI = '".$IMEI."' and Trip_Index = '".$Trip_Index."' order by date_Stamp desc limit 1";
+		$Mysql_Query = "select * from geo_fence_alerts where IMEI = '".$IMEI."' and Trip_Index = '".$Trip_Index."' order by date_Stamp desc limit 1";
 		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
 		$Mysql_Record_Count = mysql_num_rows($Mysql_Query_Result);
 		if($Mysql_Record_Count > 0){
@@ -1252,5 +1278,166 @@
 		else
 			return false;
 	}	
-?>
+	
+	/*
+		Device Commands
+	*/
+	function DeviceCommands($IMEI){
+		
+		$Result = null;
+		$Mysql_Query = "select * from device_commands where imei = '".$IMEI."'";
+		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
+		$Mysql_Record_Count = mysql_num_rows($Mysql_Query_Result);
+		if($Mysql_Record_Count > 0){
+			$Query_Result = mysql_fetch_array($Mysql_Query_Result);
+			$Result = addcslashes($Query_Result['device_command']);
+		}
+		else{
+			$Result = null;
+		}
+		return $Result;
+	}	
+	
+	/*
+	Check SMS alert
+	*/
+	function triggerSMSAlertForDevices($Data){
+		
+		$Results = null;
+		// Formating Data
+		list($Format_Type,$Protocol_Version,$IMEI,$Date_Stamp,$Live_Data,$GPS_Status,$Latitude,$Longitude,$Altitude,$Speed,$Direction,$Odometer,$GPS_Move_Status,$External_Battery_Volt,$Internal_Battery_Percent,$GSM_Signal,$Unused,$Alert_Msg_Code,$Sensor_Interface,$IGN,$Analog_Input1,$Digital_Input1,$Output1,$Sequence_No,$Check_Sum)=explode (",",$Data);
+		
+		//Formatting Date
+		$Date_Format_Val = Date_Format_WTGPS($Date_Stamp);
+		$Device_Date_Stamp = $Date_Format_Val[0];
+		$Device_Epoch_Time = $Date_Format_Val[1];
+		$Date_Stamp = date("d-M-Y h:m a");
+		//$alreadyDeviceSent =  ($IMEI, $Date_Stamp);
+		$alreadyDeviceSent = 1;
+		
+		$Mysql_Query = "call spSelSMSAlertByIMEI('".$IMEI."')";
+		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
+		$Row_Count = mysql_num_rows($Mysql_Query_Result);
+		if($Row_Count >=1){
+			while($Result_Array = mysql_fetch_array($Mysql_Query_Result)){
+				$SMS_Alert_Name = $Result_Array['sms_alert_name'];
+				$SMS_Alert_Type_ID = $Result_Array['sms_alert_type_id'];
+				$Mobile_Number = $Result_Array['send_mobile'];
+				$Firstname = $Result_Array['firstname'];
+				$Vehicle_No = $Result_Array['vehicle_no'];
+				$SMS_Template = $Result_Array['template_content'];
+				$Device_Command = $Result_Array['device_command'];
+				$Configuration = $Result_Array['configuration'];
+				
+				switch($SMS_Alert_Type_ID){
+					case 1: //'speed_alert
+						if($Speed == $Configuration){
+							$Results = formatSMSAlert($Firstname, $Vehicle_No, $Speed,$Date_Stamp, $SMS_Template,$Device_Command, $Mobile_Number);
+						}
+					break;	
+					case 2: //'engine_on_alert'
+					case 3: //'engine_off_alert':
+						if($alreadyDeviceSent == 0){
+							if($IGN == 1){
+								$Results = formatSMSAlert($Firstname, $Vehicle_No, $Speed,$Date_Stamp, $SMS_Template,$Device_Command, $Mobile_Number);
+							}
+							else if($IGN == 0){
+								$Results = formatSMSAlert($Firstname, $Vehicle_No, $Speed,$Date_Stamp, $SMS_Template,$Device_Command, $Mobile_Number);
+							}
+						}
+					break;	
+					default:
+					break;
+				}				
+			}	
+		}	
+		return $Results;
+		
+	}
+	
+	
+	/*
+	Check SMS alert
+	*/
+	function formatSMSAlert($Firstname, $Vehicle_No, $Speed,$Date_Stamp, $SMS_Template,$Device_Command, $Mobile_Number){
 
+		// For SMS
+		if(strpos($SMS_Template, '[USER_NAME]')){
+			$SMS_Template = str_replace('[USER_NAME]', $Firstname, $SMS_Template);
+			$SMS_Template = str_replace('[VEHICLE_NUMBER]', $Vehicle_No, $SMS_Template);
+			$SMS_Template = str_replace('[SPEED]', $Speed, $SMS_Template);
+			$SMS_Template = str_replace('[DATE_TIME]', $Date_Stamp, $SMS_Template);
+		}
+		// For Device_Command	//$IPCFG,<DEVCMD: SMS=[MOBILE_NUMBER],[MESSAGE] >
+		$Device_Command_Template = str_replace('[MOBILE_NUMBER]', $Mobile_Number, $Device_Command);
+		$Device_Command_Template = str_replace('[MESSAGE]', $SMS_Template, $Device_Command_Template);
+		
+		return $Device_Command_Template;
+	}
+	
+	
+	/*
+	Device response data
+	*/
+	function insertDeviceResponseData($deviceResponseData){
+		
+		$Result = false;
+		$deviceResponseData = join($deviceResponseData);
+		$deviceResponseDataExplode = explode(",", $deviceResponseData);
+		$commandPrefix = $deviceResponseDataExplode[0];
+		if(is_numeric($deviceResponseDataExplode[1])){
+			$IMEI = $deviceResponseDataExplode[1];
+		}
+		else{
+			$IMEI = $deviceResponseDataExplode[2];
+		}
+		$Date_Stamp = date("Y-m-d H:i:s");
+
+		$Mysql_Query = "INSERT INTO device_command_history (command_prefix,imei,raw_data,date_stamp) values ('".$commandPrefix."','".$IMEI."','".$deviceResponseData."','".$Date_Stamp."')";
+		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
+		if($Mysql_Query_Result){
+			$Result = true;
+		}
+		return $Result;
+	}
+	
+	
+		
+	/*
+	Device response data
+	*/
+	function selDeviceResponseDataByIMEI($imei, $dateStamp){
+		
+		$Result = 0;
+		$dateStamp = date("Y-m-d", strtotime($dateStamp));
+		$Mysql_Query = "select * from device_command_history where imei = '".$imei."' and date(date_stamp) = '".$dateStamp."'";
+		$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
+		$Row_Count = mysql_num_rows($Mysql_Query_Result);
+		return $Result = $Row_Count;
+	}	
+	
+	
+	
+	/*
+		Device response data
+	*/
+	function recordDeviceCommandsHistory($Request_Type, $IMEI, $SMS_Alert_Type_ID){
+		
+		$Date_Stamp = date("Y-m-d H:i:s");
+		if($Request_Type == 'send'){
+			$Mysql_Query = "INSERT INTO device_command_history (request_type,sms_alert_type_id,send_date_stamp, imei, date_stamp) values ('send','".$SMS_Alert_Type_ID."', '".$Date_Stamp."','".$IMEI."','".$Date_Stamp."')";
+			$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
+			if($Mysql_Query_Result){
+				$Result = true;
+			}
+		}
+		else if($Request_Type == 'receive'){
+			$Mysql_Query = "INSERT INTO device_command_history (request_type,sms_alert_type_id,send_date_stamp, imei, date_stamp) values ('send','".$SMS_Alert_Type_ID."', '".$Date_Stamp."','".$IMEI."','".$Date_Stamp."')";
+			$Mysql_Query_Result = mysql_query($Mysql_Query) or die(mysql_error());
+			if($Mysql_Query_Result){
+				$Result = true;
+			}
+		}
+		return $Result;
+	}
+?>

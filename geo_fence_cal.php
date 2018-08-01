@@ -13,7 +13,7 @@
 				// Gefence Insert
 		if(count($Geofence_Decide_InOut_Array) > 0){
 			//Geofence Decision Maker
-			$Geofence_Decision_Maker_Status = Geofence_Decision_Maker($Geofence_Decide_InOut_Array, $Get_AccountID_IMEI, $Latitude, $Longitude, $Location_Name, $IMEI, $Device_Date_Stamp, $POI_Alerts_Table_Name = 'geo_fence_alerts');
+			$Geofence_Decision_Maker_Status = Geofence_Decision_Maker($Geofence_Decide_InOut_Array, $Get_AccountID_IMEI, $Latitude, $Longitude, $Location_Name, $IMEI, $Device_Date_Stamp, $POI_Alerts_Table_Name = 'geo_fence_alerts_new');
 		}	
 	}
 	else{

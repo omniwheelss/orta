@@ -18,7 +18,7 @@
 		
 		// Daily Serial data File Creation
 		$Log_Prefix = $IMEI;
-		File_Creation($Data,$LogPath,$Log_Prefix);
+		//File_Creation($Data,$LogPath,$Log_Prefix);
 		PrintMessage("Individual Log File Created",$Debug);
 
 		PrintMessage("Inside GPS and Data parsing done",$Debug);
@@ -31,12 +31,13 @@
 			if(($IGN == 1 && $Speed < 1.3) || ($IGN == 0 && $Speed > 0 )){
 				$Log_Prefix = "Error";
 				if($IGN == 0){
-					File_Creation($Data,$LogPath,$Log_Prefix,$Extra_Data);
+					//File_Creation($Data,$LogPath,$Log_Prefix,$Extra_Data);
 					PrintMessage("Error Log File Created",$Debug);
 				}	
 				$Speed = 0;
 			}				
 
+			
 			//Formatting Date
 			$Date_Format_Val = Date_Format_WTGPS($Date_Stamp);
 			$Device_Date_Stamp = $Date_Format_Val[0];
@@ -44,7 +45,6 @@
 			
 			// Fetching Location from Location Master
 			$Location_Name = FetchLocationName($Latitude,$Longitude);
-			//$Location_Name = "location not available";
 			PrintMessage("Location Name Fetched",$Debug);
 
 			// Check Duplicate data
@@ -62,16 +62,13 @@
 					PrintMessage("Device Data Not Inserted",$Debug);
 				}
 				
-				if($Live_Data == 1){
-					include("device_status.php");
-				}
 				############################################
 				#
 				#	POI Calculation
 				#
 				##############################################
 				if($GPS_Status == 1){
-					include_once("geo_fence_cal.php");
+					include_once("geo_fence_cal_demo.php");
 					PrintMessage("GeoFence Calculation Done",$Debug);
 				}
 			}
